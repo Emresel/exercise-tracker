@@ -10,57 +10,99 @@ import requests
 from PIL import Image, ImageTk
 import threading
 import time
+import sys
 
-class ExerciseTracker:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Daily Exercise and Calorie Tracker")
-        self.root.geometry("1200x800")
-        self.root.configure(bg='#f0f0f0')
+class MainApplication(tk.Tk):
+    def __init__(self, *args, **kwargs):
+        tk.Tk.__init__(self, *args, **kwargs)
+        self.title("Health & Fitness Tracker")
+        self.geometry("1000x800")
+        self.configure(bg='#f0f0f0')
         
+        container = ttk.Frame(self)
+        container.pack(side="top", fill="both", expand=True)
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
+        
+        menubar = tk.Menu(container, font=('Arial', 12))
+        
+        nav_menu = tk.Menu(menubar, tearoff=0, font=('Arial', 12))
+        nav_menu.add_command(label="Exercise Tracker", command=lambda: self.show_frame("ExerciseTracker"), font=('Arial', 12))
+        nav_menu.add_command(label="BMI Calculator", command=lambda: self.show_frame("BMICalculator"), font=('Arial', 12))
+        nav_menu.add_command(label="Calorie Calculator", command=lambda: self.show_frame("CalorieCalculator"), font=('Arial', 12))
+        menubar.add_cascade(label="Navigation", menu=nav_menu, font=('Arial', 12))
+        
+        self.config(menu=menubar)
+        
+        style = ttk.Style()
+        style.configure('TMenubutton', font=('Arial', 12))
+        style.configure('TButton', font=('Arial', 11))
+        style.configure('TLabel', font=('Arial', 11))
+        
+        self.frames = {}
+        
+        for F in (ExerciseTracker, BMICalculator, CalorieCalculator):
+            frame = F(container, self)
+            self.frames[F.__name__] = frame
+            frame.grid(row=0, column=0, sticky="nsew")
+        
+        self.show_frame("ExerciseTracker")
+    
+    def show_frame(self, cont):
+        frame = self.frames[cont]
+        frame.tkraise()
 
+class ExerciseTracker(ttk.Frame):
+    def __init__(self, parent, controller):
+        ttk.Frame.__init__(self, parent)
+        self.controller = controller
+        
+        self.main_frame = ttk.Frame(self, padding="10")
+        self.main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        self.history_frame = ttk.Frame(self, padding="10")
+        self.history_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        self.food_history_frame = ttk.Frame(self, padding="10")
+        self.food_history_frame.grid(row=0, column=2, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        self.root = controller
+        
         self.data_file = "exercise_data.json"
-        self.exercises: List[Dict] = []
-        self.food_intake: List[Dict] = []
-        self.total_calories_burned: float = 0
-        self.total_calories_intake: float = 0
-        self.history: List[Dict] = []
-        self.current_date: str = datetime.now().strftime("%d/%m/%Y")
+        self.exercises = []
+        self.food_intake = []
+        self.total_calories_burned = 0
+        self.total_calories_intake = 0
+        self.history = []
+        self.food_history = []
+        self.current_date = datetime.now().strftime("%d/%m/%Y")
         
-
-        self.target_calories: float = 2000  # Default daily target
-        self.activity_level: str = "Moderate"
+        self.target_calories = 2000
+        self.activity_level = "Moderate"
         
-  
         self.create_widgets()
         self.load_data()
         self.update_calories()
         self.update_history()
         
-       
         self.auto_save_timer = None
         self.start_auto_save()
 
     def create_widgets(self):
-
-        self.main_frame = ttk.Frame(self.root, padding="10")
-        self.main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-
-   
-        self.history_frame = ttk.Frame(self.root, padding="10")
-        self.history_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
-
-  
         ttk.Label(self.history_frame, text="Exercise History", font=('Arial', 14, 'bold')).pack(pady=10)
         
-  
         self.history_list = tk.Listbox(self.history_frame, width=50, height=25)
         self.history_list.pack(fill=tk.BOTH, expand=True)
         
-  
-        ttk.Button(self.history_frame, text="Clear History", command=self.clear_history).pack(pady=10)
+        ttk.Button(self.history_frame, text="Clear Exercise History", command=self.clear_history).pack(pady=10)
 
-   
+        ttk.Label(self.food_history_frame, text="Food History", font=('Arial', 14, 'bold')).pack(pady=10)
+        
+        self.food_history_list = tk.Listbox(self.food_history_frame, width=50, height=25)
+        self.food_history_list.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Button(self.food_history_frame, text="Clear Food History", command=self.clear_food_history).pack(pady=10)
+
         ttk.Label(self.main_frame, text="Add Exercise", font=('Arial', 14, 'bold')).grid(row=0, column=0, columnspan=2, pady=10)
         
         ttk.Label(self.main_frame, text="Exercise Name:").grid(row=1, column=0, sticky=tk.W)
@@ -76,39 +118,36 @@ class ExerciseTracker:
         self.calorie_burned.grid(row=3, column=1, padx=5, pady=5)
 
         ttk.Button(self.main_frame, text="Add Exercise", command=self.add_exercise).grid(row=4, column=0, columnspan=2, pady=10)
-
-    
-        ttk.Label(self.main_frame, text="Add Food", font=('Arial', 14, 'bold')).grid(row=5, column=0, columnspan=2, pady=10)
         
-        ttk.Label(self.main_frame, text="Food Name:").grid(row=6, column=0, sticky=tk.W)
+        ttk.Label(self.main_frame, text="Food Name:").grid(row=5, column=0, sticky=tk.W)
         self.food_name = ttk.Entry(self.main_frame)
-        self.food_name.grid(row=6, column=1, padx=5, pady=5)
+        self.food_name.grid(row=5, column=1, padx=5, pady=5)
 
-        ttk.Label(self.main_frame, text="Calories:").grid(row=7, column=0, sticky=tk.W)
+        ttk.Label(self.main_frame, text="Calories:").grid(row=6, column=0, sticky=tk.W)
         self.calorie_intake = ttk.Entry(self.main_frame)
-        self.calorie_intake.grid(row=7, column=1, padx=5, pady=5)
+        self.calorie_intake.grid(row=6, column=1, padx=5, pady=5)
 
-        ttk.Button(self.main_frame, text="Add Food", command=self.add_calorie).grid(row=8, column=0, columnspan=2, pady=10)
-
-      
-        ttk.Label(self.main_frame, text="Total Calories", font=('Arial', 14, 'bold')).grid(row=9, column=0, columnspan=2, pady=10)
+        ttk.Button(self.main_frame, text="Add Food", command=self.add_calorie).grid(row=7, column=0, columnspan=2, pady=10)
+        
+        ttk.Label(self.main_frame, text="Total Calories", font=('Arial', 14, 'bold')).grid(row=8, column=0, columnspan=2, pady=10)
         
         self.total_calories_label = ttk.Label(self.main_frame, text="Total Calories Burned: 0")
-        self.total_calories_label.grid(row=10, column=0, columnspan=2, pady=5)
+        self.total_calories_label.grid(row=9, column=0, columnspan=2, pady=5)
         
         self.total_intake_label = ttk.Label(self.main_frame, text="Total Calories Intake: 0")
-        self.total_intake_label.grid(row=11, column=0, columnspan=2, pady=5)
+        self.total_intake_label.grid(row=10, column=0, columnspan=2, pady=5)
         
         self.net_calories_label = ttk.Label(self.main_frame, text="Net Calories: 0")
-        self.net_calories_label.grid(row=12, column=0, columnspan=2, pady=5)
+        self.net_calories_label.grid(row=11, column=0, columnspan=2, pady=5)
         
         self.target_progress = ttk.Progressbar(self.main_frame, orient='horizontal', length=200, mode='determinate')
-        self.target_progress.grid(row=13, column=0, columnspan=2, pady=5)
+        self.target_progress.grid(row=12, column=0, columnspan=2, pady=5)
         
         self.target_label = ttk.Label(self.main_frame, text="Target Progress: 0%")
-        self.target_label.grid(row=14, column=0, columnspan=2, pady=5)
+        self.target_label.grid(row=13, column=0, columnspan=2, pady=5)
 
-     
+        ttk.Button(self.main_frame, text="Reset Total Calories", command=self.reset_calories).grid(row=14, column=0, columnspan=2, pady=10)
+
         self.date_label = ttk.Label(self.main_frame, text=f"Date: {datetime.now().strftime('%d/%m/%Y')}")
         self.date_label.grid(row=15, column=0, columnspan=2, pady=5)
 
@@ -118,7 +157,7 @@ class ExerciseTracker:
             duration_str = self.duration.get().strip()
             calories_str = self.calorie_burned.get().strip()
             
-            # Validate input
+          
             if not name or not duration_str or not calories_str:
                 messagebox.showerror("Error", "Please fill in all fields")
                 return
@@ -238,9 +277,10 @@ class ExerciseTracker:
             "total_calories_burned": self.total_calories_burned,
             "total_calories_intake": self.total_calories_intake,
             "history": self.history,
+            "food_history": self.food_history,
+            "current_date": self.current_date,
             "target_calories": self.target_calories,
-            "activity_level": self.activity_level,
-            "current_date": self.current_date
+            "activity_level": self.activity_level
         }
         with open(self.data_file, 'w') as f:
             json.dump(data, f)
@@ -250,30 +290,73 @@ class ExerciseTracker:
             if os.path.exists(self.data_file):
                 with open(self.data_file, 'r') as f:
                     data = json.load(f)
-                    self.exercises = data.get('exercises', [])
-                    self.food_intake = data.get('food_intake', [])
-                    self.total_calories_burned = data.get('total_calories_burned', 0)
-                    self.total_calories_intake = data.get('total_calories_intake', 0)
-                    self.history = data.get('history', [])
-                    self.target_calories = data.get('target_calories', 2000)
-                    self.activity_level = data.get('activity_level', 'Moderate')
-                    self.current_date = data.get('current_date', datetime.now().strftime("%d/%m/%Y"))
+                    self.exercises = data.get("exercises", [])
+                    self.food_intake = data.get("food_intake", [])
+                    self.total_calories_burned = data.get("total_calories_burned", 0)
+                    self.total_calories_intake = data.get("total_calories_intake", 0)
+                    self.history = data.get("history", [])
+                    self.food_history = data.get("food_history", [])
+                    self.current_date = data.get("current_date", datetime.now().strftime("%d/%m/%Y"))
+                    self.target_calories = data.get("target_calories", 2000)
+                    self.activity_level = data.get("activity_level", "Moderate")
+                    
+                  
+                    for exercise in self.exercises:
+                        if 'duration' not in exercise:
+                            exercise['duration'] = 0
+                    
                     self.update_calories()
                     self.update_history()
         except Exception as e:
             messagebox.showerror("Error", f"Error loading data: {str(e)}")
             print(f"Error loading data: {str(e)}")
+            self.save_data()  
 
     def update_history(self):
+    
         self.history_list.delete(0, tk.END)
-        for item in reversed(self.history):
-            self.history_list.insert(tk.END, item)
+        for exercise in reversed(self.exercises):
+            entry = f"{exercise['timestamp']} - {exercise['name']}, {exercise.get('duration', 0)} min, {exercise['calories']} calories"
+            self.history_list.insert(tk.END, entry)
+
+      
+        self.food_history_list.delete(0, tk.END)
+        for food in reversed(self.food_intake):
+            entry = f"{food['timestamp']} - {food['name']}, {food['calories']} calories"
+            self.food_history_list.insert(tk.END, entry)
 
     def clear_history(self):
-        self.history = []
+       
+        self.exercises = []
         self.history_list.delete(0, tk.END)
-        messagebox.showinfo("Başarılı", "Geçmiş başarıyla temizlendi!")
+        messagebox.showinfo("Success", "Exercise history cleared successfully!")
         self.save_data()
+        self.update_history()
+
+    def clear_food_history(self):
+       
+        self.food_intake = []
+        self.food_history_list.delete(0, tk.END)
+        messagebox.showinfo("Success", "Food history cleared successfully!")
+        self.save_data()
+        self.update_history()
+
+    def reset_calories(self):
+        """Reset all total calories, history, and progress"""
+     
+        self.total_calories_burned = 0
+        self.total_calories_intake = 0
+        
+       
+        self.exercises = []
+        self.food_intake = []
+        self.history_list.delete(0, tk.END)
+        self.food_history_list.delete(0, tk.END)
+        
+        self.update_calories()
+        self.update_history()
+        self.save_data()
+        messagebox.showinfo("Success", "All data has been reset successfully!")
 
     def start_auto_save(self):
         """Start auto-save timer"""
@@ -306,65 +389,110 @@ class ExerciseTracker:
         except Exception as e:
             messagebox.showerror("Error", f"Error exporting data: {str(e)}")
 
-    def show_stats(self):
-        """Show detailed statistics"""
+class BMICalculator(ttk.Frame):
+    def __init__(self, parent, controller):
+        ttk.Frame.__init__(self, parent)
+        self.controller = controller
+        
+        label = ttk.Label(self, text="BMI Calculator", font=('Arial', 16, 'bold'))
+        label.pack(pady=10, padx=10)
+        
+        
+        ttk.Label(self, text="Height (cm):").pack()
+        self.height = ttk.Entry(self)
+        self.height.pack()
+        
+        ttk.Label(self, text="Weight (kg):").pack()
+        self.weight = ttk.Entry(self)
+        self.weight.pack()
+        
+        self.result = ttk.Label(self, text="")
+        self.result.pack(pady=10)
+        
+        ttk.Button(self, text="Calculate BMI", command=self.calculate_bmi).pack()
+    
+    def calculate_bmi(self):
         try:
-            stats = {
-                'Total Exercises': len(self.exercises),
-                'Total Foods': len(self.food_intake),
-                'Average Exercise Duration': sum(e['duration'] for e in self.exercises) / len(self.exercises) if self.exercises else 0,
-                'Average Calories Burned': sum(e['calories'] for e in self.exercises) / len(self.exercises) if self.exercises else 0,
-                'Average Calories Intake': sum(f['calories'] for f in self.food_intake) / len(self.food_intake) if self.food_intake else 0
-            }
-            
-            stats_text = "Detailed Statistics:\n\n"
-            for key, value in stats.items():
-                stats_text += f"{key}: {value:.1f}\n"
-            
-            messagebox.showinfo("Statistics", stats_text)
-        except Exception as e:
-            messagebox.showerror("Error", f"Error showing statistics: {str(e)}")
+            height = float(self.height.get()) / 100 
+            weight = float(self.weight.get())
+            bmi = weight / (height * height)
+            category = self.get_bmi_category(bmi)
+            self.result.config(text=f"BMI: {bmi:.1f} - {category}")
+        except ValueError:
+            self.result.config(text="Please enter valid numbers")
+    
+    def get_bmi_category(self, bmi):
+        if bmi < 18.5:
+            return "Underweight"
+        elif 18.5 <= bmi < 25:
+            return "Normal weight"
+        elif 25 <= bmi < 30:
+            return "Overweight"
+        else:
+            return "Obese"
 
-    def change_date(self):
-        """Change current date"""
+class CalorieCalculator(ttk.Frame):
+    def __init__(self, parent, controller):
+        ttk.Frame.__init__(self, parent)
+        self.controller = controller
+        
+        label = ttk.Label(self, text="Daily Calorie Needs Calculator", font=('Arial', 16, 'bold'))
+        label.pack(pady=10, padx=10)
+        
+   
+        ttk.Label(self, text="Age:").pack()
+        self.age = ttk.Entry(self)
+        self.age.pack()
+        
+        ttk.Label(self, text="Gender:").pack()
+        self.gender = ttk.Combobox(self, values=["Male", "Female"])
+        self.gender.pack()
+        
+        ttk.Label(self, text="Weight (kg):").pack()
+        self.weight = ttk.Entry(self)
+        self.weight.pack()
+        
+        ttk.Label(self, text="Height (cm):").pack()
+        self.height = ttk.Entry(self)
+        self.height.pack()
+        
+        ttk.Label(self, text="Activity Level:").pack()
+        self.activity = ttk.Combobox(self, values=["Sedentary", "Lightly Active", "Moderately Active", "Very Active", "Extra Active"])
+        self.activity.pack()
+        
+        self.result = ttk.Label(self, text="")
+        self.result.pack(pady=10)
+        
+        ttk.Button(self, text="Calculate Daily Calories", command=self.calculate_calories).pack()
+    
+    def calculate_calories(self):
         try:
-            from tkinter import simpledialog
-            new_date = simpledialog.askstring("Change Date", "Enter new date (DD/MM/YYYY):", 
-                                            initialvalue=self.current_date)
-            if new_date:
-                try:
-                    datetime.strptime(new_date, "%d/%m/%Y")
-                    self.current_date = new_date
-                    self.date_label.config(text=f"Date: {self.current_date}")
-                    self.save_data()
-                except ValueError:
-                    messagebox.showerror("Error", "Invalid date format. Please use DD/MM/YYYY")
-        except Exception as e:
-            messagebox.showerror("Error", f"Error changing date: {str(e)}")
-
-    def get_exercise_recommendations(self):
-        """Get exercise recommendations based on activity level"""
-        try:
-            recommendations = {
-                'Low': "Walking, Yoga, Light stretching",
-                'Moderate': "Jogging, Cycling, Swimming, HIIT",
-                'High': "Running, Weightlifting, CrossFit, Boxing"
-            }
+            age = int(self.age.get())
+            weight = float(self.weight.get())
+            height = float(self.height.get())
+            gender = self.gender.get()
+            activity = self.activity.get()
             
-            messagebox.showinfo("Exercise Recommendations", 
-                              f"Based on your activity level ({self.activity_level}):\n\n" + 
-                              recommendations.get(self.activity_level, "No recommendations available"))
-        except Exception as e:
-            messagebox.showerror("Error", f"Error getting recommendations: {str(e)}")
-
-    def open_nutrition_calculator(self):
-        """Open nutrition calculator in web browser"""
-        try:
-            webbrowser.open("https://www.calculator.net/calorie-calculator.html")
-        except Exception as e:
-            messagebox.showerror("Error", f"Error opening nutrition calculator: {str(e)}")
+          
+            if gender == "Male":
+                bmr = 88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age)
+            else:  
+                bmr = 447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age)
+            
+         
+            activity_multiplier = {
+                "Sedentary": 1.2,
+                "Lightly Active": 1.375,
+                "Moderately Active": 1.55,
+                "Very Active": 1.725,
+                "Extra Active": 1.9
+            }.get(activity, 1.2)
+            
+            daily_calories = bmr * activity_multiplier
+            self.result.config(text=f"Daily Calorie Needs: {daily_calories:.0f} calories")
+        except ValueError:
+            self.result.config(text="Please fill in all fields correctly")
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = ExerciseTracker(root)
-    root.mainloop()
+    app = MainApplication()
+    app.mainloop()
