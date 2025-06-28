@@ -1,16 +1,8 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
-from datetime import datetime, timedelta
+from tkinter import ttk, messagebox
+from datetime import datetime
 import json
 import os
-import math
-from typing import List, Dict, Optional
-import webbrowser
-import requests
-from PIL import Image, ImageTk
-import threading
-import time
-import sys
 
 class MainApplication(tk.Tk):
     def __init__(self, *args, **kwargs):
@@ -85,8 +77,7 @@ class ExerciseTracker(ttk.Frame):
         self.update_calories()
         self.update_history()
         
-        self.auto_save_timer = None
-        self.start_auto_save()
+        # Auto-save functionality removed
 
     def create_widgets(self):
         ttk.Label(self.history_frame, text="Exercise History", font=('Arial', 14, 'bold')).pack(pady=10)
@@ -357,22 +348,6 @@ class ExerciseTracker(ttk.Frame):
         self.update_history()
         self.save_data()
         messagebox.showinfo("Success", "All data has been reset successfully!")
-
-    def start_auto_save(self):
-        """Start auto-save timer"""
-        self.auto_save_timer = threading.Timer(300, self.auto_save)
-        self.auto_save_timer.daemon = True
-        self.auto_save_timer.start()
-
-    def auto_save(self):
-        """Auto-save data every 5 minutes"""
-        try:
-            self.save_data()
-            print("Auto-save completed successfully")
-        except Exception as e:
-            print(f"Error during auto-save: {str(e)}")
-        finally:
-            self.start_auto_save()
 
     def export_data(self):
         """Export data to CSV"""
