@@ -900,7 +900,3 @@ if __name__ == "__main__":
             self.result.config(text=f"Daily Calorie Needs: {daily_calories:.0f} calories")
         except ValueError:
             self.result.config(text="Please fill in all fields correctly")
-
-if __name__ == "__main__":
-    app = MainApplication()
-    app.mainloop()
