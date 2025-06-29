@@ -4,7 +4,7 @@ from main import DataManager, Exercise, Food
 
 class TestDataManager(unittest.TestCase):
     def setUp(self):
-        # Test dosyası ile çalış, gerçek veriyi etkileme
+      
         self.data_manager = DataManager(data_file="test_exercise_data.json")
         self.data_manager.reset_all()
 
